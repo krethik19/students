@@ -1,0 +1,215 @@
+##pipes##
+#include<stdio.h>
+#include<unistd.h>
+#include<sys/types.h>
+#include<sys/wait.h>
+int main()
+{
+int fd[2],n;
+char buffer[100];
+pid_t p;
+pipe(fd); //creates a unidirectional pipe with two end fd[0] and fd[1]
+p=fork();
+if(p>0) //parent
+{
+printf("Parent Passing value to child\n");
+write(fd[1],"hello\n",6); //fd[1] is the write end of the pipe
+wait();
+}
+else // child
+{
+printf("Child printing received value\n");
+n=read(fd[0],buffer,100); //fd[0] is the read end of the pipe
+write(1,buffer,n);
+}
+}
+
+
+###shared memory sender###
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/shm.h>
+#include<string.h>
+int main()
+{
+int i;
+void *shared_memory;
+char buff[100];
+int shmid;
+shmid=shmget((key_t)2345, 1024, 0666|IPC_CREAT); //creates shared memory segment with key 2345, having size 1024 bytes. IPC_CREAT is used to create the shared segment if it does not exist. 0666 are the permisions on the shared segment
+printf("Key of shared memory is %d\n",shmid);
+shared_memory=shmat(shmid,NULL,0); //process attached to shared memory segment
+printf("Process attached at %p\n",shared_memory); //this prints the address where the segment is attached with this process
+printf("Enter some data to write to shared memory\n");
+read(0,buff,100); //get some input from user
+strcpy(shared_memory,buff); //data written to shared memory
+printf("You wrote : %s\n",(char *)shared_memory);
+}
+
+RECIVER
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/shm.h>
+#include<string.h>
+int main()
+{
+int i;
+void *shared_memory;
+char buff[100];
+int shmid;
+shmid=shmget((key_t)2345, 1024, 0666);
+printf("Key of shared memory is %d\n",shmid);
+shared_memory=shmat(shmid,NULL,0); //process attached to shared memory segment
+printf("Process attached at %p\n",shared_memory);
+printf("Data read from shared memory is : %s\n",(char *)shared_memory);
+}
+
+4--message queue
+
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MAX 10
+
+// Define a message structure with a message type and text
+struct mesg {
+    long mesg_type;
+    char mesg_text[MAX];
+} message;
+
+int main() {
+    key_t key;
+    int msgid;
+
+    // Generate a unique key based on the file path and a user-defined character
+    key = ftok("messageid", 65);
+
+    // Create a message queue with read and write permissions for all users
+    msgid = msgget(key, 0666 | IPC_CREAT);
+
+    // Set the message type to 1
+    message.mesg_type = 1;
+
+    printf("Enter message text: ");
+    // Read up to MAX characters from stdin into the message text
+    fgets(message.mesg_text, MAX, stdin);
+    // Send the message to the message queue
+    msgsnd(msgid, &message, sizeof(message), 0);
+
+    printf("Data sent: %s\n", message.mesg_text);
+
+    return 0;
+}
+
+
+
+
+5)Program for wait() system call which makes the parent process wait for the child to finish.
+|
+#include<unistd.h>
+#include<sys/types.h>
+#include<stdio.h>
+#include<sys/wait.h>
+int main()
+{
+pid_t p;
+printf("before fork\n");
+p=fork();
+if(p==0)//child
+{
+printf("I am child having id %d\n",getpid());
+printf("My parent's id is %d\n",getppid());
+}
+else//parent
+{
+wait(NULL);
+printf("My child's id is %d\n",p);
+printf("I am parent having id %d\n",getpid());
+}
+printf("Common\n");
+}
+
+
+6)dining philosopy
+#include<stdio.h>
+#include<stdlib.h>
+#include<pthread.h>
+#include<semaphore.h>
+#include<unistd.h>
+sem_t chopstick[5];
+void * philos(void *);
+void eat(int);
+int main()
+ {
+         int i,n[5];
+         pthread_t T[5];
+         for(i=0;i<5;i++)
+         sem_init(&chopstick[i],0,1);
+         for(i=0;i<5;i++){
+                 n[i]=i;
+                 pthread_create(&T[i],NULL,philos,(void *)&n[i]);
+                 }
+         for(i=0;i<5;i++)
+                 pthread_join(T[i],NULL);
+ }
+void * philos(void * n)
+ {
+         int ph=*(int *)n;
+         printf("Philosopher %d wants to eat\n",ph);
+         printf("Philosopher %d tries to pick left chopstick\n",ph);
+         sem_wait(&chopstick[ph]);
+         printf("Philosopher %d picks the left chopstick\n",ph);
+         printf("Philosopher %d tries to pick the right chopstick\n",ph);
+         sem_wait(&chopstick[(ph+1)%5]);
+         printf("Philosopher %d picks the right chopstick\n",ph);
+         eat(ph);
+         sleep(2);
+         printf("Philosopher %d has finished eating\n",ph);
+         sem_post(&chopstick[(ph+1)%5]);
+         printf("Philosopher %d leaves the right chopstick\n",ph);
+         sem_post(&chopstick[ph]);
+         printf("Philosopher %d leaves the left chopstick\n",ph);
+ }
+ void eat(int ph)
+ {
+         printf("Philosopher %d begins to eat\n",ph);
+ }
+ 
+ 7). threading
+ #include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<pthread.h> 
+#include<string.h>
+void *thread_function(void *arg);
+ int i,n,j;
+ int main() {
+ char *m="5";
+ pthread_t a_thread;  //thread declaration
+ void *result;
+ pthread_create(&a_thread, NULL, thread_function, m); //thread is created
+ pthread_join(a_thread, &result); 
+ printf("Thread joined\n");
+ for(j=20;j<25;j++)
+ {
+ printf("%d\n",j);
+ sleep(1);
+ }
+ printf("thread returned %s\n",(char *)result);
+ }
+ void *thread_function(void *arg) {    
+ int sum=0;
+ n=atoi(arg);
+for(i=0;i<n;i++)
+ {
+ printf("%d\n",i);
+ sleep(1);
+ }
+ pthread_exit("Done"); // Thread returns "Done"
+ }
+How it works?
+When we call pthread_create() function a value if passed to the thread by passing that value as the fourth parameter of the pthread_create() function.
+
